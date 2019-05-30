@@ -1,7 +1,9 @@
+'use strict';
 var WebSocketServer = require('ws').Server;
 var UUID = require('node-uuid');
 var events = require('events');
 var util = require('util');
+const logger = require('./logger').getLogger('skyRTC');
 
 var errorCb = function (rtc) {
     return function (error) {
@@ -16,7 +18,7 @@ function SkyRTC() {
     this.rooms = {};
     // 加入房间
     this.on('__join', function (data, socket) {
-        console.log("房间里有"+this.sockets.length+"人");
+        logger.info("房间里有"+this.sockets.length+"人");
         var ids = [],
             i, m,
             room = data.room || "__default",
@@ -63,6 +65,8 @@ function SkyRTC() {
                     "id":data.id,
                     "label": data.label,
                     "candidate": data.candidate,
+                    "sdpMid": data.sdpMid,
+                    "sdpMLineIndex": data.sdpMLineIndex,
                     "socketId": socket.id
                 }
             }), errorCb);
@@ -176,7 +180,7 @@ SkyRTC.prototype.init = function (socket) {
     that.addSocket(socket);
     //为新连接绑定事件处理器
     socket.on('message', function (data) {
-        console.log(data);
+        logger.info(data);
         var json = JSON.parse(data);
         if (json.eventName) {
             that.emit(json.eventName, json.data, socket);

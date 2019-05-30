@@ -11,22 +11,16 @@ const SkyRTC = function () {
     );
 
 
-    var nativeRTCIceCandidate = (window.mozRTCIceCandidate || window.RTCIceCandidate);
-    var nativeRTCSessionDescription = (window.mozRTCSessionDescription || window.RTCSessionDescription);
-    var moz = !!navigator.mozGetUserMedia;
+    // var nativeRTCIceCandidate = (window.mozRTCIceCandidate || window.RTCIceCandidate);
+    // var nativeRTCSessionDescription = (window.mozRTCSessionDescription || window.RTCSessionDescription);
+    // var moz = !!navigator.mozGetUserMedia;
 
 
     var iceServer = {
         "iceServers": [
             {
-                "url": "stun:stun.l.google.com:19302"
-            },
-            {
-                "url": "stun:47.254.34.146:3478"
-            },
-            {
-                "url": "turn:47.254.34.146:3478",
-                "username": "dds",
+                "url": "turn:apprtc.dev.x2.dm-ai.cn:3478",
+                "username": "fuxin",
                 "credential": "123456"
             }
         ]
@@ -126,7 +120,7 @@ const SkyRTC = function () {
         };
 
         socket.onclose = function (data) {
-            that.localMediaStream.close();
+            that.localMediaStream.getTracks().forEach(track => track.stop());
             var pcs = that.peerConnections;
             for (i = pcs.length; i--;) {
                 that.closePeerConnection(pcs[i]);
@@ -148,7 +142,7 @@ const SkyRTC = function () {
         });
 
         this.on("_ice_candidate", function (data) {
-            var candidate = new nativeRTCIceCandidate(data);
+            var candidate = new RTCIceCandidate(data);
             var pc = that.peerConnections[data.socketId];
             if (!pc || !pc.remoteDescription.type) {
                 //push candidate onto queue...
@@ -322,7 +316,7 @@ const SkyRTC = function () {
     skyrtc.prototype.sendAnswer = function (socketId, sdp) {
         var pc = this.peerConnections[socketId];
         var that = this;
-        pc.setRemoteDescription(new nativeRTCSessionDescription(sdp));
+        pc.setRemoteDescription(new RTCSessionDescription(sdp));
         pc.createAnswer(function (session_desc) {
             pc.setLocalDescription(session_desc);
             that.socket.send(JSON.stringify({
@@ -340,7 +334,7 @@ const SkyRTC = function () {
     //接收到answer类型信令后将对方的session描述写入PeerConnection中
     skyrtc.prototype.receiveAnswer = function (socketId, sdp) {
         var pc = this.peerConnections[socketId];
-        pc.setRemoteDescription(new nativeRTCSessionDescription(sdp));
+        pc.setRemoteDescription(new RTCSessionDescription(sdp));
     };
 
 
@@ -368,6 +362,8 @@ const SkyRTC = function () {
                         "id": evt.candidate.sdpMid,
                         "label": evt.candidate.sdpMLineIndex,
                         "candidate": evt.candidate.candidate,
+                        "sdpMid": evt.candidate.sdpMid,
+                        "sdpMLineIndex": evt.candidate.sdpMLineIndex,
                         "socketId": socketId
                     }
                 }));
