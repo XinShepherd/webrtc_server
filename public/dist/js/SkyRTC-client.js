@@ -63,6 +63,8 @@ const SkyRTC = function () {
         this.localMediaStream = null;
         //所在房间
         this.room = "";
+        //房主 socket id
+        this.roomOwner = null;
         //接收文件时用于暂存接收文件
         this.fileData = {};
         //本地WebSocket连接
@@ -137,8 +139,18 @@ const SkyRTC = function () {
             //获取所有服务器上的
             that.connections = data.connections;
             that.me = data.you;
+            that.roomOwner = data.ownerId || that.roomOwner;
             that.emit("get_peers", that.connections);
             that.emit('connected', socket);
+        });
+
+        // 房主是否变更
+        this.on('_new_owner', function (data) {
+            if (that.roomOwner !== data.ownerId) {
+                // TODO something
+                that.roomOwner = data.ownerId;
+                console.log("_new_owner", that);
+            }
         });
 
         this.on("_ice_candidate", function (data) {
@@ -154,8 +166,8 @@ const SkyRTC = function () {
 
         this.on('_new_peer', function (data) {
             that.connections.push(data.socketId);
-            var pc = that.createPeerConnection(data.socketId),
-                i, m;
+            var pc = that.createPeerConnection(data.socketId);
+            that.roomOwner = data.ownerId || that.roomOwner;
             pc.addStream(that.localMediaStream);
             that.emit('new_peer', data.socketId);
         });

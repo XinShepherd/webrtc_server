@@ -13,22 +13,40 @@ var errorCb = function (rtc) {
     };
 };
 
+/**
+ * 用于维护一个房间数据
+ **/
+class Room {
+
+    constructor(roomId) {
+        this.roomId = roomId;
+        this.sockets = [];
+        this.owerId = null;
+    }
+
+}
+
 function SkyRTC() {
-    this.sockets = [];
+    this.wholeSockets = [];
     this.rooms = {};
     // 加入房间
     this.on('__join', function (data, socket) {
-        logger.info("房间里有"+this.sockets.length+"人");
+
         var ids = [],
             i, m,
             room = data.room || "__default",
             curSocket,
             curRoom;
 
-        curRoom = this.rooms[room] = this.rooms[room] || [];
+        curRoom = this.rooms[room] = this.rooms[room] || new Room(room);
 
-        for (i = 0, m = curRoom.length; i < m; i++) {
-            curSocket = curRoom[i];
+        // 确认房主
+        if (curRoom.sockets.length === 0) {
+            socket.owner = true;
+            curRoom.owerId = socket.id;
+        }
+        for (i = 0, m = curRoom.sockets.length; i < m; i++) {
+            curSocket = curRoom.sockets[i];
             if (curSocket.id === socket.id) {
                 continue;
             }
@@ -36,19 +54,22 @@ function SkyRTC() {
             curSocket.send(JSON.stringify({
                 "eventName": "_new_peer",
                 "data": {
-                    "socketId": socket.id
+                    "socketId": socket.id,
+                    "ownerId": curRoom.owerId
                 }
             }), errorCb);
         }
 
-        curRoom.push(socket);
+        curRoom.sockets.push(socket);
         socket.room = room;
+        logger.info("房间" + room + "里有" + curRoom.sockets.length + "人");
 
         socket.send(JSON.stringify({
             "eventName": "_peers",
             "data": {
                 "connections": ids,
-                "you": socket.id
+                "you": socket.id,
+                "ownerId": curRoom.owerId
             }
         }), errorCb);
 
@@ -117,36 +138,44 @@ function SkyRTC() {
 util.inherits(SkyRTC, events.EventEmitter);
 
 SkyRTC.prototype.addSocket = function (socket) {
-    this.sockets.push(socket);
+    this.wholeSockets.push(socket);
 };
 
 SkyRTC.prototype.removeSocket = function (socket) {
-    var i = this.sockets.indexOf(socket),
-        room = socket.room;
-    this.sockets.splice(i, 1);
-    if (room) {
-        i = this.rooms[room].indexOf(socket);
-        this.rooms[room].splice(i, 1);
-        if (this.rooms[room].length === 0) {
+    var i = this.wholeSockets.indexOf(socket),
+        roomId = socket.room;
+    this.wholeSockets.splice(i, 1);
+    if (roomId) {
+        let room = this.rooms[roomId];
+        let roomSockets = room.sockets;
+        i = roomSockets.indexOf(socket);
+        roomSockets.splice(i, 1);
+        if (roomSockets.length === 0) {
             delete this.rooms[room];
+        } else if (room.owerId === socket.id) {
+            room.owerId = room.sockets[0].id;
+            this.broadcastInRoom(room.roomId, JSON.stringify({
+                "eventName": "_new_owner",
+                "data": {
+                    "ownerId": room.owerId
+                }
+            }), errorCb)
         }
     }
 };
 
 SkyRTC.prototype.broadcast = function (data, errorCb) {
     var i;
-    for (i = this.sockets.length; i--;) {
-        this.sockets[i].send(data, errorCb);
+    for (i = this.wholeSockets.length; i--;) {
+        this.wholeSockets[i].send(data, errorCb);
     }
 };
 
-
-
 SkyRTC.prototype.broadcastInRoom = function (room, data, errorCb) {
-    var curRoom = this.rooms[room], i;
-    if (curRoom) {
-        for (i = curRoom.length; i--;) {
-            curRoom[i].send(data, errorCb);
+    var sockets = this.rooms[room].sockets, i;
+    if (sockets) {
+        for (i = sockets.length; i--;) {
+            sockets[i].send(data, errorCb);
         }
     }
 };
@@ -162,11 +191,11 @@ SkyRTC.prototype.getRooms = function () {
 
 SkyRTC.prototype.getSocket = function (socketId) {
     var i, curSocket;
-    if (!this.sockets) {
+    if (!this.wholeSockets) {
         return;
     }
-    for (i = this.sockets.length; i--;) {
-        curSocket = this.sockets[i];
+    for (i = this.wholeSockets.length; i--;) {
+        curSocket = this.wholeSockets[i];
         if (socketId === curSocket.id) {
             return curSocket;
         }
@@ -195,11 +224,11 @@ SkyRTC.prototype.init = function (socket) {
             curRoom;
         if (room) {
             curRoom = that.rooms[room];
-            for (i = curRoom.length; i--;) {
-                if (curRoom[i].id === socket.id) {
+            for (i = curRoom.sockets.length; i--;) {
+                if (curRoom.sockets[i].id === socket.id) {
                     continue;
                 }
-                curRoom[i].send(JSON.stringify({
+                curRoom.sockets[i].send(JSON.stringify({
                     "eventName": "_remove_peer",
                     "data": {
                         "socketId": socket.id
