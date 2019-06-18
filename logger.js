@@ -6,7 +6,9 @@ log4js.configure({
     appenders: {
         file: {
             type: 'file',
-            filename: 'app.log',
+            filename: 'logs/app.log',
+            pattern: 'yyyy-MM-dd',
+            compress: true,
             layout: {
                 type: 'pattern',
                 pattern: '%d %p --- %c : %m',

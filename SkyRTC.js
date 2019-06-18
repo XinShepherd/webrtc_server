@@ -35,13 +35,15 @@ function SkyRTC() {
         var ids = [],
             i, m,
             room = data.room || "__default",
+            clientType = data.clientType || "web",
             curSocket,
             curRoom;
 
         curRoom = this.rooms[room] = this.rooms[room] || new Room(room);
 
-        // 确认房主
-        if (curRoom.sockets.length === 0) {
+        socket.clientType = clientType;
+        // 确认房主，web端为房主
+        if (!curRoom.owerId && clientType === "web") {
             socket.owner = true;
             curRoom.owerId = socket.id;
         }
@@ -50,11 +52,15 @@ function SkyRTC() {
             if (curSocket.id === socket.id) {
                 continue;
             }
-            ids.push(curSocket.id);
+            ids.push({
+                socketId: curSocket.id,
+                clientType: curSocket.clientType
+            });
             curSocket.send(JSON.stringify({
                 "eventName": "_new_peer",
                 "data": {
                     "socketId": socket.id,
+                    "clientType": clientType,
                     "ownerId": curRoom.owerId
                 }
             }), errorCb);
@@ -69,6 +75,7 @@ function SkyRTC() {
             "data": {
                 "connections": ids,
                 "you": socket.id,
+                "clientType": clientType,
                 "ownerId": curRoom.owerId
             }
         }), errorCb);
@@ -151,15 +158,20 @@ SkyRTC.prototype.removeSocket = function (socket) {
         i = roomSockets.indexOf(socket);
         roomSockets.splice(i, 1);
         if (roomSockets.length === 0) {
-            delete this.rooms[room];
+            delete this.rooms[roomId];
         } else if (room.owerId === socket.id) {
-            room.owerId = room.sockets[0].id;
-            this.broadcastInRoom(room.roomId, JSON.stringify({
-                "eventName": "_new_owner",
-                "data": {
-                    "ownerId": room.owerId
+            for (let j = 0; j < roomSockets.length; j++) {
+                if (roomSockets[j].clientType === 'web') {
+                    room.owerId = roomSockets[j].id;
+                    this.broadcastInRoom(room.roomId, JSON.stringify({
+                        "eventName": "_new_owner",
+                        "data": {
+                            "ownerId": room.owerId
+                        }
+                    }), errorCb);
+                    break;
                 }
-            }), errorCb)
+            }
         }
     }
 };
